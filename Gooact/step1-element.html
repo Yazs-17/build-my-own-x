@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<meta charset="utf-8" />
+	<title>JSX 自定义 createElement 示例</title>
+	<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+
+<body>
+	<p><strong>Example One:</strong></p>
+	<pre id="one"></pre>
+	<p><strong>Example Two:</strong></p>
+	<pre id="two"></pre>
+
+	<script type="text/babel">
+		/** @jsx createElement */
+		const createElement = (type, props, ...children) => {
+			if (props === null) props = {};
+			return { type, props, children };
+		};
+
+		const prettyVDOM = (vdom) => JSON.stringify(vdom, null, 4);
+
+		document.getElementById('one').textContent = prettyVDOM(
+			<div>Hello World!</div>
+		);
+
+		document.getElementById('two').textContent = prettyVDOM(
+			<ul className="some-list">
+				<li className="some-list__item">One</li>
+				<li className="some-list__item">Two</li>
+			</ul>
+		);
+	</script>
+</body>
+
+</html>
