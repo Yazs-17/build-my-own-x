@@ -1,0 +1,163 @@
+<!doctype html>
+<html>
+
+<head>
+	<meta charset="utf-8" />
+	<title>Tiny React Render Demo</title>
+	<style>
+		.some-list {
+			font-family: sans-serif;
+			background: #f7f7f7;
+			padding: 10px;
+			border-radius: 6px;
+			width: 200px;
+		}
+
+		.some-list__item {
+			padding: 6px;
+			border-bottom: 1px solid #eee;
+		}
+
+		button {
+			margin-top: 8px;
+		}
+	</style>
+</head>
+
+<body>
+	<div id="root"></div>
+
+	<script>
+		/*** Minimal VDOM + renderer with logs ***/
+
+		// JSX pragma: /** @jsx createElement */  // if using transpiler
+		const createElement = (type, props, ...children) => {
+			if (props == null) props = {};
+			// normalize children: flatten and convert numbers->string
+			const flatChildren = [].concat(...children).map(c =>
+				(typeof c === 'number' ? String(c) : c)
+			);
+			const vdom = { type, props, children: flatChildren };
+			console.log('createElement ->', vdom);
+			return vdom;
+		};
+
+		const setAttribute = (dom, key, value) => {
+			if (typeof value === 'function' && key.startsWith('on')) {
+				const eventType = key.slice(2).toLowerCase();
+				dom.__gooactHandlers = dom.__gooactHandlers || {};
+				// remove old if exists
+				if (dom.__gooactHandlers[eventType])
+					dom.removeEventListener(eventType, dom.__gooactHandlers[eventType]);
+				dom.__gooactHandlers[eventType] = value;
+				dom.addEventListener(eventType, value);
+				console.log(`  setAttribute: bind event ${eventType}`);
+			} else if (key === 'checked' || key === 'value' || key === 'className') {
+				dom[key === 'className' ? 'className' : key] = value;
+				console.log(`  setAttribute: set special prop ${key} = ${value}`);
+			} else if (key === 'style' && typeof value === 'object') {
+				Object.assign(dom.style, value);
+				console.log(`  setAttribute: style`, value);
+			} else if (key === 'ref' && typeof value === 'function') {
+				value(dom);
+				console.log('  setAttribute: called ref');
+			} else if (key === 'key') {
+				dom.__gooactKey = value;
+			} else if (typeof value !== 'object' && typeof value !== 'function') {
+				dom.setAttribute(key, value);
+				console.log(`  setAttribute: attr ${key}="${value}"`);
+			}
+		};
+
+		// Support for function components: call function with props to get VDOM
+		const render = (vdom, parent = null) => {
+			if (parent) parent.textContent = ''; // clear container (no diff)
+			const mount = parent ? el => parent.appendChild(el) : el => el;
+
+			// primitives
+			if (typeof vdom === 'string' || typeof vdom === 'number') {
+				console.log('render: text node ->', vdom);
+				return mount(document.createTextNode(vdom));
+			}
+			if (typeof vdom === 'boolean' || vdom === null || vdom === undefined) {
+				console.log('render: empty node for', vdom);
+				return mount(document.createTextNode(''));
+			}
+
+			// component function
+			if (typeof vdom.type === 'function') {
+				console.log('render: component ->', vdom.type.name || '<anonymous>');
+				const componentVdom = vdom.type(Object.assign({}, vdom.props, { children: vdom.children }));
+				// allow component to return VDOM (could be nested)
+				return render(componentVdom, parent);
+			}
+
+			// regular element
+			if (typeof vdom.type === 'string') {
+				console.log('render: element ->', vdom.type);
+				const dom = document.createElement(vdom.type);
+
+				// render & append children recursively
+				for (const child of vdom.children) {
+					dom.appendChild(render(child));
+				}
+
+				// set attributes AFTER children to mimic common patterns (order not critical)
+				for (const prop in vdom.props) {
+					setAttribute(dom, prop, vdom.props[prop]);
+				}
+
+				return mount(dom);
+			}
+
+			throw new Error('Invalid VDOM: ' + vdom);
+		};
+
+		/****** Example function component ******/
+		function List (props) {
+			// props.children is an array of li vdoms
+			// we can also create new VDOM inside
+			return (
+				createElement('div', null,
+					createElement('h3', null, props.title),
+					createElement('ul', { className: 'some-list' }, ...props.children),
+					createElement('button', { onClick: props.onRefresh }, 'Refresh (re-render)')
+				)
+			);
+		}
+
+		/****** Build initial VDOM tree ******/
+		const listVDOM = createElement(List, {
+			title: 'My Items',
+			onRefresh: () => {
+				console.log('Button clicked -> re-rendering whole tree (no diff)');
+				// recreate new vdom (simulate changed data)
+				const newTree = createElement(List, {
+					title: 'My Items (updated ' + new Date().toLocaleTimeString() + ')',
+					onRefresh: () => {
+						console.log('Inner button clicked -> re-render again');
+						// you can call render again; shows full replacement
+						render(createApp(), document.getElementById('root'));
+					}
+				},
+					createElement('li', { className: 'some-list__item' }, 'One (v2)'),
+					createElement('li', { className: 'some-list__item' }, 'Two (v2)'),
+					createElement('li', { className: 'some-list__item' }, 'Three (new)')
+				);
+				render(newTree, document.getElementById('root'));
+			}
+		},
+			createElement('li', { className: 'some-list__item' }, 'One'),
+			createElement('li', { className: 'some-list__item' }, 'Two')
+		);
+
+		function createApp () {
+			return listVDOM;
+		}
+
+		// Initial render
+		render(createApp(), document.getElementById('root'));
+	</script>
+</body>
+
+</html>
