@@ -11,8 +11,8 @@ Implement React in 160 lines of JavaScript.
 
 1. from JSX to VDOM
 2. form VDOM to DOM
-3. fix (the importance of key property and use VDOM to fix current DOM)
-4. Component
+3. patching (the importance of key property and use VDOM to fix current DOM)
+4. component
 
 #### 一些注释
 **对于Step>2**

@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<meta charset="utf-8">
+	<title>Gooact Virtual DOM Example</title>
+</head>
+
+<body>
+	<div id="root"></div>
+	<script>
+		/** ---------- Step 1: Virtual DOM 定义 ---------- **/
+		const createElement = (type, props, ...children) => ({
+			type,
+			props: props || {},
+			children: children.flat()
+		});
+
+		const render = (vdom, parent = null) => {
+			if (typeof vdom === 'string' || typeof vdom === 'number') {
+				return document.createTextNode(vdom);
+			}
+
+			if (typeof vdom.type === 'function') {
+				return Component.render(vdom, parent);
+			}
+
+			const dom = document.createElement(vdom.type);
+
+			for (const prop in vdom.props) {
+				setAttribute(dom, prop, vdom.props[prop]);
+			}
+
+			vdom.children.map(child => render(child, dom)).forEach(dom.appendChild.bind(dom));
+
+			if (parent) parent.appendChild(dom);
+			return dom;
+		};
+
+		const setAttribute = (dom, name, value) => {
+			if (name.startsWith("on")) {
+				const eventName = name.slice(2).toLowerCase();
+				dom.addEventListener(eventName, value);
+			} else if (name === "style" && typeof value === "object") {
+				Object.assign(dom.style, value);
+			} else if (name in dom) {
+				dom[name] = value;
+			} else {
+				dom.setAttribute(name, value);
+			}
+		};
+
+		/** ---------- Step 2: 组件系统 ---------- **/
+		class Component {
+			constructor(props) {
+				this.props = props || {};
+				this.state = {};
+			}
+
+			setState (nextState) {
+				this.state = Object.assign({}, this.state, nextState);
+				updateInstance(this.__internalInstance);
+			}
+
+			static render (vdom, parent) {
+				const props = Object.assign({}, vdom.props, { children: vdom.children });
+				const instance = new vdom.type(props);
+				const childVdom = instance.render();
+				const dom = render(childVdom, parent);
+				dom.__gooactInstance = instance;
+				instance.__internalInstance = { dom, element: vdom };
+				if (instance.componentDidMount) instance.componentDidMount();
+				return dom;
+			}
+
+			static patch (dom, vdom, parent) {
+				const instance = dom.__gooactInstance;
+				if (!instance) return patch(dom, vdom, parent);
+				const props = Object.assign({}, vdom.props, { children: vdom.children });
+				instance.props = props;
+				const newChildVdom = instance.render();
+				const newDom = patch(dom, newChildVdom, parent);
+				instance.__internalInstance.dom = newDom;
+				return newDom;
+			}
+		}
+
+		/** ---------- Step 3: patching（你提到的部分） ---------- **/
+		const patch = (dom, vdom, parent = dom.parentNode) => {
+			const replace = parent ? el => (parent.replaceChild(el, dom) && el) : el => el;
+
+			if (typeof vdom === 'object' && typeof vdom.type === 'function') {
+				return Component.patch(dom, vdom, parent);
+			} else if (typeof vdom !== 'object' && dom instanceof Text) {
+				return dom.textContent !== vdom ? replace(render(vdom, parent)) : dom;
+			} else if (typeof vdom === 'object' && dom instanceof Text) {
+				return replace(render(vdom, parent));
+			} else if (typeof vdom === 'object' && dom.nodeName !== vdom.type.toUpperCase()) {
+				return replace(render(vdom, parent));
+			} else if (typeof vdom === 'object' && dom.nodeName === vdom.type.toUpperCase()) {
+				const pool = {};
+				const active = document.activeElement;
+
+				// 建立旧 DOM 的 key 池
+				Array.from(dom.childNodes).forEach((child, index) => {
+					const key = child.__gooactKey || `__index_${index}`;
+					pool[key] = child;
+				});
+
+				// 对比新虚拟 DOM
+				vdom.children.forEach((child, index) => {
+					const key = (child.props && child.props.key) || `__index_${index}`;
+					dom.appendChild(pool[key] ? patch(pool[key], child) : render(child, dom));
+					delete pool[key];
+				});
+
+				// 删除多余的节点
+				for (const key in pool) {
+					const instance = pool[key].__gooactInstance;
+					if (instance && instance.componentWillUnmount) instance.componentWillUnmount();
+					pool[key].remove();
+				}
+
+				// 更新属性
+				for (const attr of Array.from(dom.attributes)) dom.removeAttribute(attr.name);
+				for (const prop in vdom.props) setAttribute(dom, prop, vdom.props[prop]);
+
+				active.focus();
+				return dom;
+			}
+		};
+
+		/** ---------- Step 4: 实例演示 ---------- **/
+		class Counter extends Component {
+			constructor(props) {
+				super(props);
+				this.state = { count: 0 };
+			}
+
+			increment = () => {
+				this.setState({ count: this.state.count + 1 });
+			};
+
+			render () {
+				return createElement(
+					"div",
+					{ style: { textAlign: "center", marginTop: "40px" } },
+					createElement("h1", null, "Count: ", this.state.count),
+					createElement("button", { onClick: this.increment }, "Increment")
+				);
+			}
+		}
+
+		const root = document.getElementById("root");
+		render(createElement(Counter, null), root);
+	</script>
+</body>
+
+</html>
